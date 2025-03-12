@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:latest 
+    container_name: postgresdb
+    restart: always
+    environment:
+      POSTGRES_USER: testuser
+      POSTGRES_PASSWORD: testpassword
+      POSTGRES_DB: testdb
+    ports:
+      - 5432:5432
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - test-network
+
+  app:
+    build:
+      context: .
+      target: development
+    container_name: testapp
+    restart: always
+    depends_on:
+      - postgres
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: testuser
+      DB_PASSWORD: testpassword
+      DB_DATABASE: testdb
+    ports:
+      - 3000:3000
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: npm run start:dev
+    networks:
+      - test-network
+
+volumes:
+  pg_data:
+
+networks:
+  test-network:
+    driver: bridge
