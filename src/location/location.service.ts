@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { LocationRepository } from './location.repository';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { Location } from './entities/location.entity';
@@ -10,15 +10,17 @@ export class LocationService {
   async create(dto: CreateLocationDto): Promise<Location> {
     let path = '/';
 
-    if (dto.parentId) {
-      const parent = await this.locationRepository.findOneById(dto.parentId);
+    const { parentId, ...updateData } = dto;
+
+    if (parentId) {
+      const parent = await this.locationRepository.findOneById(parentId);
       if (!parent) {
         throw new NotFoundException('Parent location not found.');
       }
       path = `${parent.path}${parent.id}/`;
     }
 
-    return this.locationRepository.create({ ...dto, path });
+    return this.locationRepository.create({ ...updateData, path });
   }
 
   async findOne(id: number): Promise<Location> {
@@ -39,7 +41,28 @@ export class LocationService {
       throw new NotFoundException('Location not found.');
     }
 
-    return this.locationRepository.update(id, dto);
+    const { parentId, ...updateData } = dto;
+
+    const updatedFields: Partial<CreateLocationDto> & { path?: string } = { ...updateData };
+
+    if (parentId === id) {
+      throw new BadRequestException('Cannot set the location itself as parent.');
+    }
+
+    if(parentId){
+      const newParent = await this.locationRepository.findOneById(parentId);
+      if (!newParent) {
+        throw new BadRequestException('Specified parent location does not exist.');
+      }
+
+      if (newParent.path.startsWith(`${location.path}${location.id}/`)) {
+        throw new BadRequestException('Cannot set a descendant location as the parent.');
+      }
+
+      updatedFields.path = `${newParent.path}${newParent.id}/`;
+    }
+
+    return this.locationRepository.update(id, updatedFields);
   }
 
   async remove(id: number): Promise<void> {
@@ -51,7 +74,6 @@ export class LocationService {
     if (!location) {
       throw new NotFoundException('Location not found.');
     }
-
     return this.locationRepository.findParent(location);
   }
 }
